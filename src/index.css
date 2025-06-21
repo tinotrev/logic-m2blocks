@@ -1,0 +1,198 @@
+body {
+  font: 14px "Century Gothic", Futura, sans-serif;
+  margin: 0;
+  background: black;
+}
+
+.combo-display,
+.new-max-display,
+.notification-display,
+.cleanup-display {
+  font-size: 32px;
+  color: white;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 1000;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+  border: 2px solid white;
+}
+
+.game {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: black;
+}
+
+.header {
+  border-bottom: 1px solid lightgray;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.score {
+  margin: 10px;
+  font-size: 25px;
+  color: white;
+}
+
+.board {
+  margin: 7px;
+  position: relative;
+}
+
+.blocks {
+  position: relative;
+  display: grid;
+  row-gap: 5px;
+  column-gap: 5px;
+  border-radius: 5px;
+}
+
+.block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  font-size: 25px;
+  color: white;
+  font-family: Arial, Helvetica, sans-serif;
+  position: relative;
+  z-index: 2; /* por encima de lane */
+}
+
+/* LANE: columnas clickeables y visibles */
+.lane {
+  background: rgb(28, 28, 30); /* color clarito */
+  width: 70px;
+  height: 100%;
+  border-radius: 5px;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+}
+
+.lane:hover {
+  background: rgb(50, 50, 54); /* más claro al hacer hover */
+}
+
+/* TOOLTIP FLOTANTE */
+.tooltip {
+  position: absolute;
+  top: 0;
+  background: rgba(0, 0, 0, 0.85);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  pointer-events: none;
+  z-index: 10;
+  white-space: pre-line;
+}
+
+.footer {
+  align-self: stretch;
+  display: flex;
+  justify-content: center;
+  border-top: 1px solid lightgray;
+  padding: 5px;
+}
+
+.blockShoot {
+  width: 70px;
+  height: 70px;
+  display: flex;
+  border-radius: 10px;
+  border: 2px solid white;
+  padding: 5px;
+}
+
+.blockShoot > div {
+  flex-grow: 1;
+}
+
+.tooltip-block {
+  display: inline-block;
+  width: 30px;
+  height: 30px;
+}
+
+.tooltip-block .block {
+  font-size: 12px !important; /* o el tamaño que prefieras */
+  width: 30px !important;
+  height: 30px !important;
+}
+
+.tooltip-block .block {
+  width: 100% !important;
+  height: 100% !important;
+  min-width: 30px !important;
+  min-height: 30px !important;
+}
+
+.combo-display {
+  font-size: 32px;
+  color: white;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 1001;
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+  border: 2px solid #ff6b6b;
+}
+
+.new-max-display {
+  font-size: 32px;
+  color: white;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 1002;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+  border: 2px solid #4ecdc4;
+}
+
+.cleanup-display {
+  font-size: 32px;
+  color: white;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 1003;
+  position: absolute;
+  top: 60%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+  border: 2px solid #ffa726;
+}
+
+.unified-notification-display {
+  font-size: 32px;
+  color: white;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 1000;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 20px;
+  border-radius: 10px;
+  text-align: center;
+  border: 2px solid white;
+}
