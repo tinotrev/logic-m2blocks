@@ -18,24 +18,26 @@ max_in_grid(Grid, Max) :-
     include(number, Grid, Numeros),
     max_list(Numeros, Max).
 
-% Define el rango permitido según el máximo de la grilla - CORREGIDO
+% Define el rango permitido según el máximo de la grilla - CORREGIDO SEGÚN LA TABLA
 rango_disparo(Max, Rango) :-
     ( Max =< 4     -> Rango = [2,4];
       Max =< 8     -> Rango = [2,4,8];
       Max =< 16    -> Rango = [2,4,8,16];
       Max =< 32    -> Rango = [2,4,8,16,32];
       Max =< 64    -> Rango = [2,4,8,16,32,64];
-      Max =< 128   -> Rango = [4,8,16,32,64,128];
-      Max =< 256   -> Rango = [8,16,32,64,128,256];
-      Max =< 512   -> Rango = [16,32,64,128,256,512];
-      Max =< 1024  -> Rango = [32,64,128,256,512,1024];
-      Max =< 2048  -> Rango = [64,128,256,512,1024,2048];
-      Max =< 4096  -> Rango = [128,256,512,1024,2048,4096];
-      Max =< 8192  -> Rango = [256,512,1024,2048,4096,8192];
+      Max =< 128   -> Rango = [2,4,8,16,32,64];    % Máximo 128,256,512 → rango 2 a 64
+      Max =< 256   -> Rango = [2,4,8,16,32,64];    % Máximo 128,256,512 → rango 2 a 64  
+      Max =< 512   -> Rango = [2,4,8,16,32,64];    % Máximo 128,256,512 → rango 2 a 64
+      Max =< 1024  -> Rango = [4,8,16,32,64,128];  % Máximo 1024 → rango 4 a 128 (se retira el 2)
+      Max =< 2048  -> Rango = [8,16,32,64,128,256]; % Máximo 2048 → rango 8 a 256 (se retira el 4)
+      Max =< 4096  -> Rango = [16,32,64,128,256,512]; % Máximo 4096,8192 → rango 16 a 512 (se retira el 8)
+      Max =< 8192  -> Rango = [16,32,64,128,256,512]; % Máximo 4096,8192 → rango 16 a 512
+      Max =< 16384 -> Rango = [32,64,128,256,512,1024]; % Máximo 16k → rango 32 a 1024 (se retira el 16)
       % Para máximos muy altos, mantener el rango más alto
-      Rango = [256,512,1024,2048,4096,8192]  % Cambiar el caso por defecto
+      Rango = [32,64,128,256,512,1024]
     ).
-% Obtener el rango anterior para comparar - TAMBIÉN CORREGIR
+
+% Obtener el rango anterior para comparar - CORREGIDO SEGÚN LA TABLA
 rango_anterior(Max, RangoAnterior) :-
     ( Max =< 4     -> RangoAnterior = [];
       Max =< 8     -> RangoAnterior = [2,4];
@@ -43,20 +45,20 @@ rango_anterior(Max, RangoAnterior) :-
       Max =< 32    -> RangoAnterior = [2,4,8,16];
       Max =< 64    -> RangoAnterior = [2,4,8,16,32];
       Max =< 128   -> RangoAnterior = [2,4,8,16,32,64];
-      Max =< 256   -> RangoAnterior = [4,8,16,32,64,128];
-      Max =< 512   -> RangoAnterior = [8,16,32,64,128,256];
-      Max =< 1024  -> RangoAnterior = [16,32,64,128,256,512];
-      Max =< 2048  -> RangoAnterior = [32,64,128,256,512,1024];
-      Max =< 4096  -> RangoAnterior = [64,128,256,512,1024,2048];
-      Max =< 8192  -> RangoAnterior = [128,256,512,1024,2048,4096];
-      % Para máximos muy altos, mantener el rango anterior más alto
-      RangoAnterior = [128,256,512,1024,2048,4096]
-).
+      Max =< 256   -> RangoAnterior = [2,4,8,16,32,64];    % Igual que 128
+      Max =< 512   -> RangoAnterior = [2,4,8,16,32,64];    % Igual que 128
+      Max =< 1024  -> RangoAnterior = [2,4,8,16,32,64];    % ← INCLUYE EL 2 para retirarlo
+      Max =< 2048  -> RangoAnterior = [4,8,16,32,64,128];  % ← INCLUYE EL 4 para retirarlo
+      Max =< 4096  -> RangoAnterior = [8,16,32,64,128,256]; % ← INCLUYE EL 8 para retirarlo
+      Max =< 8192  -> RangoAnterior = [8,16,32,64,128,256]; % Igual que 4096
+      Max =< 16384 -> RangoAnterior = [16,32,64,128,256,512]; % ← INCLUYE EL 16 para retirarlo
+      RangoAnterior = [32,64,128,256,512,1024]
+    ).
 
 % Determinar bloques retirados cuando se alcanza un nuevo máximo
 bloques_retirados(MaxAnterior, MaxNuevo, BloquesRetirados) :-
-    rango_anterior(MaxAnterior, RangoAnterior),
-    rango_anterior(MaxNuevo, RangoNuevo),
+    rango_disparo(MaxAnterior, RangoAnterior),
+    rango_disparo(MaxNuevo, RangoNuevo),
     subtract(RangoAnterior, RangoNuevo, BloquesRetirados).
 
 % Determinar bloques agregados cuando se alcanza un nuevo máximo
