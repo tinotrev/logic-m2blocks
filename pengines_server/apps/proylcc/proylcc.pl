@@ -1,8 +1,12 @@
-%% Módulo Proylcc con corrección de rangos de disparo y sistema de combos
+%% Módulo Proylcc con correcciones de score, posicionamiento y procesamiento completo
 :- module(proylcc, 
     [
         randomBlock/2,
-        shoot/5
+        shoot/5,
+        hint_shot/5,
+        generate_block_pair/3,
+        init_game_state/3,
+        update_game_state/3
     ]).
 
 :- use_module(library(random)).
@@ -18,41 +22,22 @@ max_in_grid(Grid, Max) :-
     include(number, Grid, Numeros),
     max_list(Numeros, Max).
 
-% Define el rango permitido según el máximo de la grilla - CORREGIDO SEGÚN LA TABLA
+% Define el rango permitido según el máximo de la grilla
 rango_disparo(Max, Rango) :-
     ( Max =< 4     -> Rango = [2,4];
       Max =< 8     -> Rango = [2,4,8];
       Max =< 16    -> Rango = [2,4,8,16];
       Max =< 32    -> Rango = [2,4,8,16,32];
       Max =< 64    -> Rango = [2,4,8,16,32,64];
-      Max =< 128   -> Rango = [2,4,8,16,32,64];    % Máximo 128,256,512 → rango 2 a 64
-      Max =< 256   -> Rango = [2,4,8,16,32,64];    % Máximo 128,256,512 → rango 2 a 64  
-      Max =< 512   -> Rango = [2,4,8,16,32,64];    % Máximo 128,256,512 → rango 2 a 64
-      Max =< 1024  -> Rango = [4,8,16,32,64,128];  % Máximo 1024 → rango 4 a 128 (se retira el 2)
-      Max =< 2048  -> Rango = [8,16,32,64,128,256]; % Máximo 2048 → rango 8 a 256 (se retira el 4)
-      Max =< 4096  -> Rango = [16,32,64,128,256,512]; % Máximo 4096,8192 → rango 16 a 512 (se retira el 8)
-      Max =< 8192  -> Rango = [16,32,64,128,256,512]; % Máximo 4096,8192 → rango 16 a 512
-      Max =< 16384 -> Rango = [32,64,128,256,512,1024]; % Máximo 16k → rango 32 a 1024 (se retira el 16)
-      % Para máximos muy altos, mantener el rango más alto
+      Max =< 128   -> Rango = [2,4,8,16,32,64];
+      Max =< 256   -> Rango = [2,4,8,16,32,64];
+      Max =< 512   -> Rango = [2,4,8,16,32,64];
+      Max =< 1024  -> Rango = [4,8,16,32,64,128];
+      Max =< 2048  -> Rango = [8,16,32,64,128,256];
+      Max =< 4096  -> Rango = [16,32,64,128,256,512];
+      Max =< 8192  -> Rango = [16,32,64,128,256,512];
+      Max =< 16384 -> Rango = [32,64,128,256,512,1024];
       Rango = [32,64,128,256,512,1024]
-    ).
-
-% Obtener el rango anterior para comparar - CORREGIDO SEGÚN LA TABLA
-rango_anterior(Max, RangoAnterior) :-
-    ( Max =< 4     -> RangoAnterior = [];
-      Max =< 8     -> RangoAnterior = [2,4];
-      Max =< 16    -> RangoAnterior = [2,4,8];
-      Max =< 32    -> RangoAnterior = [2,4,8,16];
-      Max =< 64    -> RangoAnterior = [2,4,8,16,32];
-      Max =< 128   -> RangoAnterior = [2,4,8,16,32,64];
-      Max =< 256   -> RangoAnterior = [2,4,8,16,32,64];    % Igual que 128
-      Max =< 512   -> RangoAnterior = [2,4,8,16,32,64];    % Igual que 128
-      Max =< 1024  -> RangoAnterior = [2,4,8,16,32,64];    % ← INCLUYE EL 2 para retirarlo
-      Max =< 2048  -> RangoAnterior = [4,8,16,32,64,128];  % ← INCLUYE EL 4 para retirarlo
-      Max =< 4096  -> RangoAnterior = [8,16,32,64,128,256]; % ← INCLUYE EL 8 para retirarlo
-      Max =< 8192  -> RangoAnterior = [8,16,32,64,128,256]; % Igual que 4096
-      Max =< 16384 -> RangoAnterior = [16,32,64,128,256,512]; % ← INCLUYE EL 16 para retirarlo
-      RangoAnterior = [32,64,128,256,512,1024]
     ).
 
 % Determinar bloques retirados cuando se alcanza un nuevo máximo
@@ -69,7 +54,7 @@ bloques_agregados(MaxAnterior, MaxNuevo, BloquesAgregados) :-
 
 /**
  * shoot(+Block, +Column, +Grid, +NumOfColumns, -Effects)
- * Función principal con limpieza de bloques retirados y avisos
+ * Función principal con procesamiento completo garantizado
  */
 shoot(Block, Column, Grid, NumOfColumns, Effects) :-
     number(Block),
@@ -77,8 +62,8 @@ shoot(Block, Column, Grid, NumOfColumns, Effects) :-
     insert_block_at_index(Grid, Index, Block, Grid1),
     Effects1 = [effect(Grid1, [])],
     max_in_grid(Grid, MaxAnterior),
-    % Procesar combinaciones con combo corregido
-    process_combinations_with_combo(Grid1, NumOfColumns, Index, Effects1, TempEffects),
+    % Procesar todo el ciclo de combinaciones y gravedad
+    process_complete_cycle(Grid1, NumOfColumns, Index, Effects1, TempEffects),
     % Verificar si hay nuevo máximo y procesar limpieza
     last(TempEffects, effect(FinalGrid, _)),
     max_in_grid(FinalGrid, MaxNuevo),
@@ -104,53 +89,200 @@ insert_block_at_index(Grid, Index, Block, NewGrid) :-
     nth0(Index, Grid, _, Rest),
     nth0(Index, NewGrid, Block, Rest).
 
-%% process_combinations_with_combo(+Grid, +NumCols, +Index, +EffectsAcc, -Effects)
-% Mantengo la lógica original pero corrijo el sistema de combos
-process_combinations_with_combo(Grid, NumCols, Index, EffectsAcc, Effects) :-
+%% PROCESAMIENTO COMPLETO - GARANTIZA QUE TODO SE PROCESE
+% process_complete_cycle(+Grid, +NumCols, +StartIndex, +EffectsAcc, -Effects)
+% Procesa combinaciones iniciales, aplica gravedad y busca nuevas combinaciones hasta estabilizar
+process_complete_cycle(Grid, NumCols, StartIndex, EffectsAcc, Effects) :-
+    % 1. Procesar combinaciones desde la posición inicial
+    process_combinations_from_position(Grid, NumCols, StartIndex, EffectsAcc, ComboEffects),
+    % 2. Aplicar ciclo completo de gravedad y combinaciones hasta estabilizar
+    last(ComboEffects, effect(CurrentGrid, _)),
+    apply_complete_gravity_cycle(CurrentGrid, NumCols, ComboEffects, Effects).
+
+% PROCESO CORREGIDO: Gravedad inmediata después de cada combinación
+% process_combinations_from_position(+Grid, +NumCols, +Index, +EffectsAcc, -Effects)
+% CORREGIDO: Aplica gravedad inmediatamente después de cada combinación
+process_combinations_from_position(Grid, NumCols, Index, EffectsAcc, Effects) :-
     nth0(Index, Grid, Value),
     Value \= '-',
-    % Buscar vecinos con el mismo valor (lógica original)
+    % Buscar todos los vecinos con el mismo valor
+    find_all_matching_neighbors(Grid, NumCols, Index, Value, AllMatches),
+    AllMatches \= [], !,
+    % Determinar posición de destino según el tipo de combinación CORREGIDO
+    determine_destination_position(Index, AllMatches, NumCols, DestPos),
+    % Calcular score y valor por separado
+    length(AllMatches, NumNeighbors),
+    TotalBlocks is NumNeighbors + 1,
+    calculate_combo_score(Value, TotalBlocks, Score),
+    calculate_new_block_value(Value, NewValue),
+    % Crear cambios: nuevo valor en destino, borrar los demás
+    CombinedBlocks = [Index|AllMatches],
+    findall((P, '-'), (member(P, CombinedBlocks), P \= DestPos), Clears),
+    Changes = [(DestPos, NewValue)|Clears],
+    apply_changes(Grid, Changes, Grid2),
+    % Información de combo corregida
+    ( TotalBlocks >= 3 ->
+        ComboInfo = [newBlock(NewValue), combo(TotalBlocks), score(Score)]
+    ;   ComboInfo = [newBlock(NewValue), score(Score)]
+    ),
+    append(EffectsAcc, [effect(Grid2, ComboInfo)], Acc2),
+    
+    % CLAVE: Aplicar gravedad INMEDIATAMENTE después de la combinación
+    apply_gravity(Grid2, NumCols, GravityGrid),
+    ( Grid2 = GravityGrid ->
+        % No hubo cambios por gravedad, continuar buscando combinaciones
+        process_combinations_from_position(Grid2, NumCols, DestPos, Acc2, Effects)
+    ;   % Hubo cambios por gravedad, agregar efecto y continuar
+        append(Acc2, [effect(GravityGrid, [gravity])], Acc3),
+        process_combinations_from_position(GravityGrid, NumCols, DestPos, Acc3, Effects)
+    ).
+process_combinations_from_position(_, _, _, EffectsAcc, EffectsAcc).
+
+% find_all_matching_neighbors(+Grid, +NumCols, +Index, +Value, -Matches)
+% Encuentra todos los vecinos directos con el mismo valor
+find_all_matching_neighbors(Grid, NumCols, Index, Value, Matches) :-
     findall(Pos,
         ( member(Direction, [left, up, right]),
           neighbor(Index, NumCols, Direction, Pos),
           nth0(Pos, Grid, Value)
-        ), Neighbors),
-    Neighbors \= [], !,
-    % Crear el path de bloques a combinar
-    Path = [Index|Neighbors],
-    length(Path, NumBlocks), % Contar cuántos bloques se combinan
-    NewValue is Value * 2,
-    % Determinar posición de destino (el primer vecino como en el original)
-    [Dest|_] = Neighbors,
-    % Crear cambios: nuevo valor en destino, borrar los demás
-    findall((P, '-'), (member(P, Path), P \= Dest), Clears),
-    Changes = [(Dest, NewValue)|Clears],
-    apply_changes(Grid, Changes, Grid2),
-    % Sistema de combo corregido: combo solo si se combinan 3+ bloques
-    ( NumBlocks >= 3 ->
-        ComboInfo = [newBlock(NewValue), combo(NumBlocks)]
-    ;   ComboInfo = [newBlock(NewValue)]
-    ),
-    append(EffectsAcc, [effect(Grid2, ComboInfo)], Acc2),
-    % Continuar procesando desde la posición de destino
-    process_combinations_with_combo(Grid2, NumCols, Dest, Acc2, Effects).
-process_combinations_with_combo(Grid, NumCols, _, EffectsAcc, Effects) :-
-    % No hay más combinaciones, continuar sin aplicar gravedad aquí
-    Effects = EffectsAcc.
+        ), Matches).
 
-%% FUNCIONES PARA GRAVEDAD (mantengo las originales)
-
-% apply_gravity_cycle(+Grid, +NumCols, +EffectsAcc, -Effects)
-apply_gravity_cycle(Grid, NumCols, EffectsAcc, Effects) :-
-    apply_gravity(Grid, NumCols, GravityGrid),
-    ( Grid = GravityGrid ->
-        % No hubo cambios por gravedad, terminamos
-        Effects = EffectsAcc
-    ;   % Hubo cambios, agregar efecto de gravedad y buscar combinaciones
-        append(EffectsAcc, [effect(GravityGrid, [gravity])], TempEffects),
-        check_for_new_combinations(GravityGrid, NumCols, TempEffects, Effects)
+% determine_destination_position(+OriginalIndex, +Neighbors, +NumCols, -DestPos)
+% CORREGIDO: Posicionamiento según las reglas específicas del juego
+determine_destination_position(OriginalIndex, Neighbors, NumCols, DestPos) :-
+    length(Neighbors, NumNeighbors),
+    ( NumNeighbors =:= 1 ->
+        % Combinación de 2 bloques
+        [NeighborPos] = Neighbors,
+        ( is_horizontal_neighbor(OriginalIndex, NeighborPos, NumCols) ->
+            % Horizontal: queda en posición ORIGINAL (donde fue lanzado)
+            DestPos = OriginalIndex
+        ;   % Vertical: queda en posición del VECINO (el que ya estaba)
+            DestPos = NeighborPos
+        )
+    ; NumNeighbors >= 2 ->
+        % Combinación de 3+: queda en el CENTRO de todos los bloques
+        AllPositions = [OriginalIndex|Neighbors],
+        find_center_position(AllPositions, DestPos)
     ).
 
+% find_center_position(+Positions, -CenterPos)
+% Encuentra la posición central geométricamente
+find_center_position(Positions, CenterPos) :-
+    sort(Positions, SortedPositions),
+    length(SortedPositions, Len),
+    ( Len mod 2 =:= 1 ->
+        % Cantidad impar: tomar el del medio
+        MiddleIndex is Len // 2,
+        nth0(MiddleIndex, SortedPositions, CenterPos)
+    ;   % Cantidad par: tomar el de la izquierda del centro
+        MiddleIndex is (Len // 2) - 1,
+        nth0(MiddleIndex, SortedPositions, CenterPos)
+    ).
+
+% is_horizontal_neighbor(+Pos1, +Pos2, +NumCols)
+% Verifica si dos posiciones son vecinos horizontales
+is_horizontal_neighbor(Pos1, Pos2, NumCols) :-
+    Row1 is Pos1 // NumCols,
+    Row2 is Pos2 // NumCols,
+    Row1 =:= Row2,
+    abs(Pos1 - Pos2) =:= 1.
+
+
+% calculate_combo_score(+BaseValue, +NumBlocks, -Score)
+% Calcula SOLO el score para combos (valor base * cantidad de bloques para 3+)
+calculate_combo_score(BaseValue, NumBlocks, Score) :-
+    ( NumBlocks >= 3 ->
+        Score is BaseValue * NumBlocks  % Combo: valor * cantidad
+    ;   Score is BaseValue * 2          % Combinación normal de 2: valor * 2
+    ).
+
+% calculate_new_block_value(+BaseValue, -NewValue)
+% Calcula el valor del nuevo bloque (SIEMPRE es el doble, sin importar si es combo)
+calculate_new_block_value(BaseValue, NewValue) :-
+    NewValue is BaseValue * 2.
+
+% CICLO SIMPLIFICADO: Ya no necesita ciclo complejo porque aplicamos gravedad inmediatamente
+% apply_complete_gravity_cycle(+Grid, +NumCols, +EffectsAcc, -Effects)
+% SIMPLIFICADO: Solo aplica gravedad final y busca combinaciones restantes
+apply_complete_gravity_cycle(Grid, NumCols, EffectsAcc, Effects) :-
+    apply_gravity(Grid, NumCols, GravityGrid),
+    ( Grid = GravityGrid ->
+        % No hubo cambios por gravedad, buscar combinaciones finales
+        check_and_process_remaining_combinations(GravityGrid, NumCols, EffectsAcc, Effects)
+    ;   % Hubo cambios, agregar efecto de gravedad
+        append(EffectsAcc, [effect(GravityGrid, [gravity])], TempEffects),
+        % Buscar combinaciones restantes
+        check_and_process_remaining_combinations(GravityGrid, NumCols, TempEffects, Effects)
+    ).
+
+% check_and_process_all_combinations(+Grid, +NumCols, +EffectsAcc, -Effects)
+% Busca y procesa TODAS las combinaciones posibles en la grilla
+check_and_process_all_combinations(Grid, NumCols, EffectsAcc, Effects) :-
+    length(Grid, Len),
+    process_all_positions_exhaustively(Grid, NumCols, 0, Len, EffectsAcc, Effects).
+
+% process_all_positions_exhaustively(+Grid, +NumCols, +Index, +Len, +EffectsAcc, -Effects)
+% Procesa exhaustivamente todas las posiciones hasta que no haya más combinaciones
+process_all_positions_exhaustively(Grid, NumCols, Index, Len, EffectsAcc, Effects) :-
+    Index >= Len, !,
+    % Terminamos de revisar todas las posiciones, verificar si hubo cambios
+    last(EffectsAcc, effect(CurrentGrid, _)),
+    ( CurrentGrid = Grid ->
+        Effects = EffectsAcc  % No hubo cambios, terminar
+    ;   % Hubo cambios, volver a revisar desde el principio
+        process_all_positions_exhaustively(CurrentGrid, NumCols, 0, Len, EffectsAcc, Effects)
+    ).
+process_all_positions_exhaustively(Grid, NumCols, Index, Len, EffectsAcc, Effects) :-
+    Index < Len,
+    nth0(Index, Grid, Value),
+    ( Value \= '-',
+      has_combination_at(Grid, NumCols, Index) ->
+        % Encontramos una combinación, procesarla
+        process_combinations_from_position(Grid, NumCols, Index, EffectsAcc, TempEffects),
+        % Continuar desde donde nos quedamos con la nueva grilla
+        last(TempEffects, effect(NewGrid, _)),
+        process_all_positions_exhaustively(NewGrid, NumCols, Index, Len, TempEffects, Effects)
+    ;   % No hay combinación en esta posición, seguir
+        NextIndex is Index + 1,
+        process_all_positions_exhaustively(Grid, NumCols, NextIndex, Len, EffectsAcc, Effects)
+    ).
+
+% check_and_process_remaining_combinations(+Grid, +NumCols, +EffectsAcc, -Effects)
+% MEJORADO: Busca y procesa combinaciones restantes de forma más eficiente
+check_and_process_remaining_combinations(Grid, NumCols, EffectsAcc, Effects) :-
+    find_first_combination_position(Grid, NumCols, Position),
+    ( Position = none ->
+        % No hay más combinaciones
+        Effects = EffectsAcc
+    ;   % Hay una combinación, procesarla
+        process_combinations_from_position(Grid, NumCols, Position, EffectsAcc, TempEffects),
+        % Verificar si hay más combinaciones después de esta
+        last(TempEffects, effect(NewGrid, _)),
+        check_and_process_remaining_combinations(NewGrid, NumCols, TempEffects, Effects)
+    ).
+
+% find_first_combination_position(+Grid, +NumCols, -Position)
+% Encuentra la primera posición con una combinación disponible
+find_first_combination_position(Grid, NumCols, Position) :-
+    length(Grid, Len),
+    between(0, Len, Index),
+    Index < Len,
+    has_combination_at(Grid, NumCols, Index),
+    !,
+    Position = Index.
+find_first_combination_position(_, _, none).
+
+% Verificar si hay una combinación en una posición específica
+has_combination_at(Grid, NumCols, Index) :-
+    nth0(Index, Grid, Value),
+    Value \= '-',
+    (   neighbor(Index, NumCols, up,    Dest), nth0(Dest, Grid, Value)
+    ;   neighbor(Index, NumCols, left,  Dest), nth0(Dest, Grid, Value)
+    ;   neighbor(Index, NumCols, right, Dest), nth0(Dest, Grid, Value)
+    ), !.
+
+%% FUNCIONES DE GRAVEDAD (sin cambios)
 % Aplicar gravedad: hacer caer todos los bloques hacia arriba (gravedad invertida)
 apply_gravity(Grid, NumCols, NewGrid) :-
     length(Grid, Len),
@@ -204,36 +336,6 @@ replace_column_helper(Grid, NumCols, Rows, Col, NewColumn, Row, NewGrid) :-
     NextRow is Row + 1,
     replace_column_helper(TempGrid, NumCols, Rows, Col, NewColumn, NextRow, NewGrid).
 
-% check_for_new_combinations(+Grid, +NumCols, +EffectsAcc, -Effects)
-check_for_new_combinations(Grid, NumCols, EffectsAcc, Effects) :-
-    length(Grid, Len),
-    check_all_positions(Grid, NumCols, 0, Len, EffectsAcc, Effects).
-
-% check_all_positions(+Grid, +NumCols, +Index, +Len, +EffectsAcc, -Effects)
-check_all_positions(Grid, NumCols, Index, Len, EffectsAcc, Effects) :-
-    Index >= Len, !,
-    Effects = EffectsAcc.
-check_all_positions(Grid, NumCols, Index, Len, EffectsAcc, Effects) :-
-    Index < Len,
-    nth0(Index, Grid, Value),
-    ( Value \= '-',
-      has_combination_at(Grid, NumCols, Index) ->
-        % Encontramos una combinación después de gravedad, procesarla
-        process_combinations_with_combo(Grid, NumCols, Index, EffectsAcc, Effects)
-    ;   % No hay combinación en esta posición, seguir
-        NextIndex is Index + 1,
-        check_all_positions(Grid, NumCols, NextIndex, Len, EffectsAcc, Effects)
-    ).
-
-% Verificar si hay una combinación en una posición específica
-has_combination_at(Grid, NumCols, Index) :-
-    nth0(Index, Grid, Value),
-    Value \= '-',
-    (   neighbor(Index, NumCols, up,    Dest), nth0(Dest, Grid, Value)
-    ;   neighbor(Index, NumCols, left,  Dest), nth0(Dest, Grid, Value)
-    ;   neighbor(Index, NumCols, right, Dest), nth0(Dest, Grid, Value)
-    ), !.
-
 %% neighbor(+Index, +NumCols, +Dir, -NeighborIndex)
 neighbor(Index, NumCols, up,    N) :- Index >= NumCols,        N is Index - NumCols.
 neighbor(Index, NumCols, left,  N) :- Col is Index mod NumCols, Col > 0, N is Index - 1.
@@ -265,16 +367,16 @@ process_cleanup_and_notifications(MaxAnterior, MaxNuevo, Grid, NumCols, EffectsA
             cleanup_retired_blocks(Grid, BloquesRetirados, CleanGrid),
             append(FinalNotifications, [cleanup(BloquesRetirados)], AllNotifications),
             append(EffectsAcc, [effect(CleanGrid, AllNotifications)], TempEffects),
-            apply_gravity_cycle(CleanGrid, NumCols, TempEffects, Effects)
+            apply_complete_gravity_cycle(CleanGrid, NumCols, TempEffects, Effects)
         ;   % No hay bloques retirados, agregar notificaciones al último efecto
             last(EffectsAcc, effect(LastGrid, LastNotifications)),
             append(LastNotifications, FinalNotifications, UpdatedNotifications),
             append(InitialEffects, [effect(LastGrid, LastNotifications)], EffectsAcc),
             append(InitialEffects, [effect(LastGrid, UpdatedNotifications)], TempEffects),
-            apply_gravity_cycle(Grid, NumCols, TempEffects, Effects)
+            apply_complete_gravity_cycle(Grid, NumCols, TempEffects, Effects)
         )
     ;   % No hay nuevo máximo, solo aplicar gravedad
-        apply_gravity_cycle(Grid, NumCols, EffectsAcc, Effects)
+        apply_complete_gravity_cycle(Grid, NumCols, EffectsAcc, Effects)
     ).
 
 % cleanup_retired_blocks(+Grid, +RetiredBlocks, -CleanGrid)
@@ -285,12 +387,9 @@ cleanup_retired_blocks(Grid, RetiredBlocks, CleanGrid) :-
         ), Changes),
     apply_changes(Grid, Changes, CleanGrid).
 
-%% SOLO LA CORRECCIÓN DE LA FUNCIÓN hint_shot EXISTENTE
-%% Reemplaza la función hint_shot en tu código original
-
-% Función para obtener hint de una jugada específica - MEJORADA
+%% FUNCIONES DE HINT Y GENERACIÓN CORREGIDAS
 % hint_shot(+Block, +Column, +Grid, +NumOfColumns, -HintInfo)
-% Predice el resultado de disparar un bloque en una columna específica
+% Predice el resultado con validación de bloques eliminados
 hint_shot(Block, Column, Grid, NumOfColumns, HintInfo) :-
     number(Block),
     % Verificar si se puede disparar en esta columna
@@ -303,70 +402,81 @@ hint_shot(Block, Column, Grid, NumOfColumns, HintInfo) :-
         % Analizar la combinación inmediata
         analyze_immediate_combination(Grid1, NumOfColumns, Index, ComboInfo),
         
-        % Si hay combinación, calcular el próximo bloque
+        % Si hay combinación, calcular el próximo bloque con validación
         ( member(newBlock(_), ComboInfo) ->
             % Simular el disparo para obtener la grilla final
             simulate_shot_outcome(Block, Column, Grid, NumOfColumns, FinalGrid),
-            % Generar el próximo bloque basado en la grilla final
-            randomBlock(FinalGrid, NextBlock),
+            % Generar el próximo bloque validando que esté disponible
+            generate_valid_next_block(FinalGrid, NextBlock),
             append(ComboInfo, [nextBlock(NextBlock)], HintInfo)
         ;   % No hay combinación, próximo bloque basado en la grilla actual
-            randomBlock(Grid1, NextBlock),
+            generate_valid_next_block(Grid1, NextBlock),
             append(ComboInfo, [nextBlock(NextBlock)], HintInfo)
         )
     ).
 
-% analyze_immediate_combination(+Grid, +NumCols, +Index, -ComboInfo)
-% Analiza qué combinación se formaría inmediatamente al colocar el bloque
+% ACTUALIZACIÓN EN analyze_immediate_combination para usar las funciones separadas
 analyze_immediate_combination(Grid, NumCols, Index, ComboInfo) :-
     nth0(Index, Grid, Value),
     Value \= '-',
-    % Buscar vecinos con el mismo valor
-    findall(Pos,
-        ( member(Direction, [left, up, right]),
-          neighbor(Index, NumCols, Direction, Pos),
-          nth0(Pos, Grid, Value)
-        ), Neighbors),
+    find_all_matching_neighbors(Grid, NumCols, Index, Value, Neighbors),
     
-    % Determinar el tipo de combinación
     ( Neighbors = [] ->
         ComboInfo = [no_combo]
     ;   length(Neighbors, NumNeighbors),
         TotalBlocks is NumNeighbors + 1,
-        NewValue is Value * 2,
+        calculate_combo_score(Value, TotalBlocks, Score),
+        calculate_new_block_value(Value, NewValue),
         ( TotalBlocks >= 3 ->
-            ComboInfo = [combo(TotalBlocks), newBlock(NewValue)]
-        ;   ComboInfo = [simple_combo, newBlock(NewValue)]
+            ComboInfo = [combo(TotalBlocks), newBlock(NewValue), score(Score)]
+        ;   ComboInfo = [simple_combo, newBlock(NewValue), score(Score)]
         )
     ).
 
 % simulate_shot_outcome(+Block, +Column, +Grid, +NumOfColumns, -FinalGrid)
-% Simula un disparo completo para obtener la grilla final
 simulate_shot_outcome(Block, Column, Grid, NumOfColumns, FinalGrid) :-
     shoot(Block, Column, Grid, NumOfColumns, Effects),
-    % Obtener la última grilla de los efectos
     last(Effects, effect(FinalGrid, _)).
 
-% Nuevo predicado para generar par de bloques (actual, siguiente)
-generate_block_pair(Grid, CurrentBlock, NextBlock) :-
+% generate_valid_next_block(+Grid, -NextBlock)
+% Genera un bloque válido verificando que esté en el rango disponible
+generate_valid_next_block(Grid, NextBlock) :-
     max_in_grid(Grid, Max),
     rango_disparo(Max, Rango),
-    random_member(CurrentBlock, Rango),
-    random_member(NextBlock, Rango).
+    % Intentar hasta 10 veces generar un bloque válido
+    between(1, 10, _),
+    random_member(NextBlock, Rango),
+    !.
+generate_valid_next_block(Grid, NextBlock) :-
+    % Si falla, tomar el primer bloque del rango
+    max_in_grid(Grid, Max),
+    rango_disparo(Max, [NextBlock|_]).
 
-% Inicializar estado del juego con par de bloques
+% Generar par de bloques con validación
+generate_block_pair(Grid, CurrentBlock, NextBlock) :-
+    generate_valid_next_block(Grid, CurrentBlock),
+    generate_valid_next_block(Grid, NextBlock).
+
+% Inicializar estado del juego
 init_game_state(Grid, NumCols, GameState) :-
     generate_block_pair(Grid, CurrentBlock, NextBlock),
     GameState = gameState(Grid, NumCols, CurrentBlock, NextBlock).
 
-% Actualizar estado después de un disparo
-update_game_state(gameState(Grid, NumCols, CurrentBlock, _), Column, NewGameState) :-
+% Actualizar estado después de un disparo con validación de bloques
+update_game_state(gameState(Grid, NumCols, CurrentBlock, NextBlock), Column, NewGameState) :-
     shoot(CurrentBlock, Column, Grid, NumCols, Effects),
-    % Obtener la grilla final después de todos los efectos
     last(Effects, effect(FinalGrid, _)),
-    % Generar nuevo par de bloques basado en la grilla final
-    generate_block_pair(FinalGrid, NewCurrentBlock, NewNextBlock),
-    NewGameState = gameState(FinalGrid, NumCols, NewCurrentBlock, NewNextBlock).
+    % Validar que el NextBlock sigue siendo válido
+    max_in_grid(FinalGrid, Max),
+    rango_disparo(Max, Rango),
+    ( member(NextBlock, Rango) ->
+        % NextBlock sigue siendo válido, generar solo un nuevo bloque
+        generate_valid_next_block(FinalGrid, NewNextBlock),
+        NewGameState = gameState(FinalGrid, NumCols, NextBlock, NewNextBlock)
+    ;   % NextBlock fue eliminado, generar nuevo par
+        generate_block_pair(FinalGrid, NewCurrentBlock, NewNextBlock),
+        NewGameState = gameState(FinalGrid, NumCols, NewCurrentBlock, NewNextBlock)
+    ).
 
 %% apply_changes(+Grid, +Changes, -NewGrid)
 apply_changes(Grid, [], Grid).
