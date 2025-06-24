@@ -113,8 +113,12 @@ process_combinations_from_position(Grid, NumCols, Index, EffectsAcc, Effects) :-
     % Calcular score y valor por separado
     length(AllMatches, NumNeighbors),
     TotalBlocks is NumNeighbors + 1,
+    % DEBUG: Imprimir información de la combinación
+    format('[DEBUG COMBO] Valor del bloque: ~w, Vecinos encontrados: ~w, Total bloques: ~w~n', [Value, NumNeighbors, TotalBlocks]),
     calculate_combo_score(Value, TotalBlocks, Score),
     calculate_new_block_value(Value, NewValue),
+    % DEBUG: Imprimir resultado final
+    format('[DEBUG RESULTADO] Score final: ~w, Nuevo bloque: ~w~n', [Score, NewValue]),
     % Crear cambios: nuevo valor en destino, borrar los demás
     CombinedBlocks = [Index|AllMatches],
     findall((P, '-'), (member(P, CombinedBlocks), P \= DestPos), Clears),
@@ -147,26 +151,37 @@ find_all_matching_neighbors(Grid, NumCols, Index, Value, Matches) :-
           nth0(Pos, Grid, Value)
         ), Matches).
 
+%% ACTUALIZACIÓN: lógica mínima para combinación de 3 bloques
 % determine_destination_position(+OriginalIndex, +Neighbors, +NumCols, -DestPos)
-% CORREGIDO: Posicionamiento según las reglas específicas del juego
 determine_destination_position(OriginalIndex, Neighbors, NumCols, DestPos) :-
     length(Neighbors, NumNeighbors),
     ( NumNeighbors =:= 1 ->
-        % Combinación de 2 bloques
         [NeighborPos] = Neighbors,
-        ( is_horizontal_neighbor(OriginalIndex, NeighborPos, NumCols) ->
-            % Horizontal: queda en posición ORIGINAL (donde fue lanzado)
-            DestPos = OriginalIndex
-        ;   % Vertical: queda en posición del VECINO (el que ya estaba)
-            DestPos = NeighborPos
+        ( is_horizontal_neighbor(OriginalIndex, NeighborPos, NumCols)
+            -> DestPos = OriginalIndex  % horizontal
+            ;  DestPos = NeighborPos   % vertical
         )
     ; NumNeighbors >= 2 ->
-        % Combinación de 3+: queda en el CENTRO de todos los bloques
+        % Para 3+ bloques, usar centro geométrico
         AllPositions = [OriginalIndex|Neighbors],
-        find_center_position(AllPositions, DestPos)
+        maplist(pos_to_rc(NumCols), AllPositions, RCPairs),
+        unzip(RCPairs, Rows, Cols),
+        average(Rows, AR), average(Cols, AC),
+        round(AR, RR), round(AC, RC),
+        DestPos is RR * NumCols + RC
     ).
 
-% find_center_position(+Positions, -CenterPos)
+% Helpers para la posición de destino geométrico
+pos_to_rc(NumCols, Pos, (R,C)) :- R is Pos // NumCols, C is Pos mod NumCols.
+unzip([], [], []).
+unzip([(A,B)|T], [A|As], [B|Bs]) :- unzip(T, As, Bs).
+average(List, Avg) :- sum_list(List, Sum), length(List, Len), Len > 0, Avg is Sum / Len.
+round(X, R) :- R is round(X).
+is_horizontal_neighbor(P1, P2, NumCols) :-
+    Row1 is P1 // NumCols, Row2 is P2 // NumCols,
+    Row1 =:= Row2, abs(P1 - P2) =:= 1.
+
+% find_center_position(Positions, -CenterPos)
 % Encuentra la posición central geométricamente
 find_center_position(Positions, CenterPos) :-
     sort(Positions, SortedPositions),
@@ -190,17 +205,19 @@ is_horizontal_neighbor(Pos1, Pos2, NumCols) :-
 
 
 % calculate_combo_score(+BaseValue, +NumBlocks, -Score)
-% Calcula SOLO el score para combos (valor base * cantidad de bloques para 3+)
+% SCORE = BaseValue * NumBlocks (Ej: bloque 2 con 3 bloques = 2*3 = 6 puntos)
 calculate_combo_score(BaseValue, NumBlocks, Score) :-
-    ( NumBlocks >= 3 ->
-        Score is BaseValue * NumBlocks  % Combo: valor * cantidad
-    ;   Score is BaseValue * 2          % Combinación normal de 2: valor * 2
-    ).
+    Score is BaseValue * NumBlocks,
+    % DEBUG: Imprimir score en consola
+    format('[DEBUG SCORE] BaseValue: ~w, NumBlocks: ~w, Score calculado: ~w~n', [BaseValue, NumBlocks, Score]).
 
 % calculate_new_block_value(+BaseValue, -NewValue)
-% Calcula el valor del nuevo bloque (SIEMPRE es el doble, sin importar si es combo)
+% NUEVO BLOQUE = BaseValue * 2 (Ej: combo de bloques 2 = nuevo bloque 4)
+% Esto es INDEPENDIENTE del tamaño del combo
 calculate_new_block_value(BaseValue, NewValue) :-
-    NewValue is BaseValue * 2.
+    NewValue is BaseValue * 2,
+    % DEBUG: Imprimir nuevo valor en consola
+    format('[DEBUG NUEVO BLOQUE] BaseValue: ~w, NewValue calculado: ~w~n', [BaseValue, NewValue]).
 
 % CICLO SIMPLIFICADO: Ya no necesita ciclo complejo porque aplicamos gravedad inmediatamente
 % apply_complete_gravity_cycle(+Grid, +NumCols, +EffectsAcc, -Effects)

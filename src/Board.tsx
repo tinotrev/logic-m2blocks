@@ -20,7 +20,6 @@ function Board({ grid, numOfColumns, onLaneClick, showHints, shblock, hintInfo, 
   const handleMouseMove = (e: React.MouseEvent) => {
     setMousePosition({ x: e.clientX, y: e.clientY });
   };
-
   // Función para formatear la información del hint - SIMPLIFICADA
   const formatHintInfo = (hint: any[]): string => {
     if (!hint || hint.length === 0) return 'Sin información';
@@ -47,11 +46,16 @@ function Board({ grid, numOfColumns, onLaneClick, showHints, shblock, hintInfo, 
           switch(item.functor) {
             case 'combo':
               return `Combo x${item.args[0]}`;
-            // No necesitas el caso newBlock porque ya lo filtras arriba
+            case 'score':
+              return `Score: ${item.args[0]}`;
+            default:
+              // Ignorar otros objetos no reconocidos para evitar [Object object]
+              return null;
           }
         }
         return String(item);
-      });
+      })
+      .filter(item => item !== null); // Filtrar elementos null
     
     return hintTypes.join(', ');
   };
@@ -89,9 +93,7 @@ function Board({ grid, numOfColumns, onLaneClick, showHints, shblock, hintInfo, 
             key={`lane-${i}`}
           />
         ))}
-      </div>
-
-      {/* Tooltip que sigue al mouse */}
+      </div>      {/* Tooltip que sigue al mouse */}
       {showHints && hoveredLane !== null && (
         <div
           className="tooltip"
@@ -102,17 +104,10 @@ function Board({ grid, numOfColumns, onLaneClick, showHints, shblock, hintInfo, 
             pointerEvents: 'none',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
             Actual:
             <div className="tooltip-block" style={{ fontSize: '10px' }}>
               <Block value={shblock!} position={[0, 0]} />
-            </div>
-          </div>
-          
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-            Siguiente:
-            <div className="tooltip-block" style={{ fontSize: '10px' }}>
-              <Block value={nextBlock!} position={[0, 0]} />
             </div>
           </div>
           

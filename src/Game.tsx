@@ -54,10 +54,17 @@ interface BlockEliminatedTerm extends PrologTerm {
   args: [];
 }
 
+// Nuevo tipo para score
+interface ScoreTerm extends PrologTerm {
+  functor: "score";
+  args: [number];
+}
+
 // Aquí se define el tipo EffectInfoTerm, que representa la información de los efectos que ocurren en el juego.
 type EffectInfoTerm = 
   | NewBlockTerm 
   | ComboTerm 
+  | ScoreTerm
   | GravityTerm 
   | CleanupTerm 
   | NewMaxBlockTerm 
@@ -86,8 +93,8 @@ function Game() {
   const [showNotification, setShowNotification] = useState<string>('');
   const [cleanedBlocks, setCleanedBlocks] = useState<number[]>([]);
   const [showCleanup, setShowCleanup] = useState<boolean>(false);
-
   const [showHints, setShowHints] = useState<boolean>(false);
+  const [showNextBlock, setShowNextBlock] = useState<boolean>(false);
 
   // Nuevo estado para hints
   const [hintInfo, setHintInfo] = useState<{[column: number]: any}>({})
@@ -219,15 +226,18 @@ function Game() {
 
     // DEBUG: Ver qué efectos están llegando
     console.log('🔥 Efectos en este step:', effectInfo.map(e => e.functor));
-    console.log('🔥 Efectos completos:', effectInfo);
-
-    // Procesar todos los efectos de este step
+    console.log('🔥 Efectos completos:', effectInfo);    // Procesar todos los efectos de este step
      effectInfo.forEach((effectInfoItem) => {
         const { functor, args } = effectInfoItem;
         
         switch (functor) {
-            case 'newBlock':
+            case 'score':
+                // CORREGIDO: El score real viene del efecto 'score', no de 'newBlock'
                 setScore(score => score + args[0]);
+                break;
+            case 'newBlock':
+                // Este es solo el valor del nuevo bloque creado, no el score
+                console.log(`🎯 Nuevo bloque creado: ${args[0]}`);
                 break;
             case 'combo':
                 if (args[0] >= 3) {
@@ -312,27 +322,42 @@ function Game() {
   }
   
   return (
-    <div className="game">
-      <div className="header">
+    <div className="game">      <div className="header">
         <div className="score">Score: {score}</div>
         <div className="max-block">Max: {maxBlock}</div>
       </div>
       
-      <button
-        onClick={() => setShowHints(prev => !prev)}
-        style={{
-          margin: '10px',
-          padding: '10px 20px',
-          fontSize: '16px',
-          cursor: 'pointer',
-          backgroundColor: showHints ? '#444' : '#222',
-          color: 'white',
-          border: '1px solid gray',
-          borderRadius: '5px'
-        }}
-      >
-        {showHints ? 'Ocultar Hints' : 'Mostrar Hints'}
-      </button>
+      <div style={{ display: 'flex', gap: '10px', margin: '10px' }}>
+        <button
+          onClick={() => setShowHints(prev => !prev)}
+          style={{
+            padding: '10px 20px',
+            fontSize: '16px',
+            cursor: 'pointer',
+            backgroundColor: showHints ? '#444' : '#222',
+            color: 'white',
+            border: '1px solid gray',
+            borderRadius: '5px'
+          }}
+        >
+          {showHints ? 'Ocultar Hints' : 'Mostrar Hints'}
+        </button>
+
+        <button
+          onClick={() => setShowNextBlock(prev => !prev)}
+          style={{
+            padding: '10px 20px',
+            fontSize: '16px',
+            cursor: 'pointer',
+            backgroundColor: showNextBlock ? '#444' : '#222',
+            color: 'white',
+            border: '1px solid gray',
+            borderRadius: '5px'
+          }}
+        >
+          {showNextBlock ? 'Ocultar Siguiente' : 'Mostrar Siguiente Bloque'}
+        </button>
+      </div>
 
       <Board
         grid={grid}
@@ -355,12 +380,28 @@ function Game() {
       )}
 
       {/* ...resto del JSX... */}
-    </div>
-  
-      <div className='footer'>
+    </div>      <div className='footer' style={{ position: 'relative' }}>
         <div className='blockShoot'>
           <Block value={shootBlock!} position={[0, 0]} />
         </div>
+        {showNextBlock && nextBlock && (
+          <div style={{ 
+            position: 'absolute',
+            left: '50%',
+            marginLeft: '100px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            display: 'flex', 
+            alignItems: 'center',
+            color: 'white',
+            fontSize: '25px'
+          }}>
+            <span style={{ marginRight: '10px' }}>Siguiente:</span>
+            <div className='blockShoot' style={{ margin: 0 }}>
+              <Block value={nextBlock} position={[0, 0]} />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
