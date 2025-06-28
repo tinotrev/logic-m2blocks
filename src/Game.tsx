@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react';
 import PengineClient, { PrologTerm } from './PengineClient';
 import Board from './Board';
@@ -178,33 +179,199 @@ function Game() {
   /**
    * Called when the player clicks on a lane.
    */
-  // Modificar handleLaneClick para usar el nuevo sistema
+  // Versión corregida que actualiza inmediatamente los bloques del footer
   async function handleLaneClick(lane: number) {
+    if (waiting || !shootBlock || !gameState) return;
+
+    setWaiting(true);
+
+    try {
+      // PASO 1: Actualizar inmediatamente la UI del footer
+      const shotBlock = shootBlock;
+      const currentNextBlock = nextBlock;
+      
+      // El bloque actual pasa a ser el siguiente
+      setShootBlock(currentNextBlock);
+      // Ocultar el siguiente bloque hasta que tengamos el nuevo valor
+      setNextBlock(null);
+
+      // PASO 2: Realizar el disparo en Prolog
+      const gameStateString = `gameState(${JSON.stringify(grid).replace(/"/g, '')}, ${numOfColumns}, ${shotBlock}, ${currentNextBlock})`;
+      const queryS = `update_game_state(${gameStateString}, ${lane}, NewGameState)`;
+      const response = await pengine.query(queryS);
+
+      if (response && response['NewGameState']) {
+        const newGameState = response['NewGameState'];
+        const newGrid = newGameState.args[0];
+        const finalCurrentBlock = newGameState.args[2];  // Este debería ser currentNextBlock
+        const finalNextBlock = newGameState.args[3];     // Este es el nuevo siguiente
+
+        // Detectar si hubo limpieza de bloques en la cola
+        if (finalCurrentBlock !== currentNextBlock) {
+          addNotification('Bloque de la cola actualizado por cambio de rango');
+        }
+
+        // Calcular nuevo máximo para la UI
+        const newMax = Math.max(...newGrid.filter((cell: any) => typeof cell === 'number'));
+        if (newMax > maxBlock) {
+          setMaxBlock(newMax);
+          addNotification(`¡Nuevo máximo alcanzado: ${newMax}!`);
+        }
+
+        // PASO 3: Obtener y animar los efectos del disparo
+        const shootQueryS = `shoot(${shotBlock}, ${lane}, ${JSON.stringify(grid).replace(/"/g, '')}, ${numOfColumns}, Effects)`;
+        const shootResponse = await pengine.query(shootQueryS);
+
+        if (shootResponse && shootResponse['Effects']) {
+          // PASO 4: Animar efectos y actualizar todo AL FINAL
+          await animateEffectsWithFinalUpdate(
+            shootResponse['Effects'], 
+            newGrid, 
+            finalCurrentBlock, 
+            finalNextBlock, 
+            newGameState
+          );
+        } else {
+          // Si no hay efectos, actualizar inmediatamente
+          updateGameStateUI(newGrid, finalCurrentBlock, finalNextBlock, newGameState);
+          setWaiting(false);
+        }
+      } else {
+        // Si hay error, restaurar el estado original
+        setShootBlock(shotBlock);
+        setNextBlock(currentNextBlock);
+        setWaiting(false);
+      }
+    } catch (error) {
+      console.error('Error in lane click:', error);
+      // Restaurar estado original en caso de error
+      setShootBlock(shootBlock);
+      setNextBlock(nextBlock);
+      setWaiting(false);
+    }
+  }
+
+  // Nueva función que maneja las animaciones y actualiza la UI al final
+  async function animateEffectsWithFinalUpdate(
+    effects: EffectTerm[], 
+    finalGrid: Grid, 
+    newCurrentBlock: number, 
+    newNextBlock: number, 
+    newGameState: any
+  ) {
+    // Animar todos los efectos SIN cambiar los bloques de disparo
+    await animateEffectsOnly(effects);
+    
+    // SOLO al final, actualizar toda la UI de una vez
+    updateGameStateUI(finalGrid, newCurrentBlock, newNextBlock, newGameState);
+    setWaiting(false);
+  }
+
+  // Función helper para actualizar toda la UI de una vez
+  function updateGameStateUI(
+    newGrid: Grid, 
+    newCurrentBlock: number, 
+    newNextBlock: number, 
+    newGameState: any
+  ) {
+    setGrid(newGrid);
+    setShootBlock(newCurrentBlock);
+    setNextBlock(newNextBlock);
+    setGameState(newGameState);
+  }
+
+  // Versión mejorada de animateEffectsOnly que NO toca los bloques de disparo
+  async function animateEffectsOnly(effects: EffectTerm[]) {
+    const effect = effects[0];    
+    const [effectGrid, effectInfo] = effect.args;
+    
+    // Solo actualiza la grilla, NO los bloques de disparo
+    setGrid(effectGrid);
+
+    // Procesar efectos (score, combos, etc.)
+    effectInfo.forEach((effectInfoItem) => {
+      const { functor, args } = effectInfoItem;
+      
+      switch (functor) {
+        case 'score':
+          setScore(score => score + args[0]);
+          break;
+        case 'combo':
+          if (args[0] >= 3) {
+            addNotification(`Combo x${args[0]}!`);
+          }
+          break;
+        case 'cleanup':
+          addNotification(`Bloques limpiados: ${args[0].join(', ')}`);
+          break;
+        case 'newMaxBlock':
+          // Ya manejado en handleLaneClick
+          break;
+        case 'blockEliminated':
+          // Ya manejado en handleLaneClick
+          break;
+        default:
+          break;
+      }
+    });
+
+    const restEffects = effects.slice(1);
+    if (restEffects.length === 0) {
+      // No más efectos, pero NO cambiar waiting aquí
+      // Se cambiará en animateEffectsWithFinalUpdate
+      return;
+    }
+    
+    const hasGravity = effectInfo.some(info => info.functor === 'gravity');
+    const delayTime = hasGravity ? 800 : 1000;
+    
+    await delay(delayTime);
+    await animateEffectsOnly(restEffects);
+  }
+
+  // Función alternativa más simple si prefieres mantener la lógica original
+  // pero con validación adicional
+  async function handleLaneClickWithValidation(lane: number) {
     if (waiting || !shootBlock) return;
 
     setWaiting(true);
     
     try {
-      // Solo hacer el disparo normal como antes
+      // Hacer el disparo normal
       const queryS = `shoot(${shootBlock}, ${lane}, ${JSON.stringify(grid).replace(/"/g, '')}, ${numOfColumns}, Effects)`;
       const response = await pengine.query(queryS);
       
       if (response && response['Effects']) {
         animateEffect(response['Effects']);
         
-        // Después de la animación, generar AMBOS bloques nuevos
         const lastEffect = response['Effects'][response['Effects'].length - 1];
         const finalGrid = lastEffect.args[0];
         
-        // Generar el nuevo bloque actual (lo que era nextBlock)
-        setShootBlock(nextBlock);
+        // Verificar si el nextBlock sigue siendo válido después del disparo
+        const validationQueryS = `validate_block_in_range(${nextBlock}, ${JSON.stringify(finalGrid).replace(/"/g, '')})`;
         
-        // Generar un nuevo nextBlock
-        const newNextBlockQueryS = `randomBlock(${JSON.stringify(finalGrid).replace(/"/g, '')}, NewBlock)`;
-        const newNextBlockResponse = await pengine.query(newNextBlockQueryS);
-        
-        if (newNextBlockResponse && newNextBlockResponse['NewBlock']) {
-          setNextBlock(newNextBlockResponse['NewBlock']);
+        try {
+          await pengine.query(validationQueryS);
+          // nextBlock es válido, usar flujo normal
+          setShootBlock(nextBlock);
+          
+          const newNextBlockQueryS = `randomBlock(${JSON.stringify(finalGrid).replace(/"/g, '')}, NewBlock)`;
+          const newNextBlockResponse = await pengine.query(newNextBlockQueryS);
+          
+          if (newNextBlockResponse && newNextBlockResponse['NewBlock']) {
+            setNextBlock(newNextBlockResponse['NewBlock']);
+          }
+        } catch (error) {
+          // nextBlock no es válido, generar ambos bloques nuevos
+          addNotification('Bloque siguiente actualizado por cambio de rango');
+          
+          const newPairQueryS = `generate_block_pair(${JSON.stringify(finalGrid).replace(/"/g, '')}, NewCurrent, NewNext)`;
+          const newPairResponse = await pengine.query(newPairQueryS);
+          
+          if (newPairResponse && newPairResponse['NewCurrent'] && newPairResponse['NewNext']) {
+            setShootBlock(newPairResponse['NewCurrent']);
+            setNextBlock(newPairResponse['NewNext']);
+          }
         }
       } else {
         setWaiting(false);
@@ -249,7 +416,7 @@ function Game() {
                 setCleanedBlocks(args[0]);
                 break;
             case 'newMaxBlock':
-                addNotification(`¡Nuevo bloque desbloqueado: ${args[0]}!`);
+                addNotification(`¡Nuevo máximo desbloqueado: ${args[0]}!`);
                 setMaxBlock(args[0]);
                 break;
             case 'blockEliminated':
@@ -322,7 +489,8 @@ function Game() {
   }
   
   return (
-    <div className="game">      <div className="header">
+    <div className="game">      
+      <div className="header">
         <div className="score">Score: {score}</div>
         <div className="max-block">Max: {maxBlock}</div>
       </div>
@@ -369,9 +537,6 @@ function Game() {
         hintInfo={hintInfo} // Pasar la información de hints
       />
 
-    <div className="game">
-      {/* ...resto del JSX... */}
-
       {/* Sistema de notificaciones unificado */}
       {currentNotification && (
         <div className="unified-notification-display">
@@ -379,10 +544,9 @@ function Game() {
         </div>
       )}
 
-      {/* ...resto del JSX... */}
-    </div>      <div className='footer' style={{ position: 'relative' }}>
+      <div className='footer' style={{ position: 'relative' }}>
         <div className='blockShoot'>
-          <Block value={shootBlock!} position={[0, 0]} />
+          {shootBlock && <Block value={shootBlock} position={[0, 0]} />}
         </div>
         {showNextBlock && nextBlock && (
           <div style={{ 

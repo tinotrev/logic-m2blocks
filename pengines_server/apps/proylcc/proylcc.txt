@@ -484,7 +484,6 @@ init_game_state(Grid, NumCols, GameState) :-
 
 % update_game_state(+GameState, +Column, -NewGameState)
 % Actualiza el estado del juego después de disparar un bloque
-% CORREGIDO: Valida y limpia bloques eliminados de la cola
 update_game_state(gameState(Grid, NumCols, CurrentBlock, NextBlock), Column, NewGameState) :-
     % Disparar el CurrentBlock y obtener los efectos
     shoot(CurrentBlock, Column, Grid, NumCols, Effects),
@@ -497,63 +496,19 @@ update_game_state(gameState(Grid, NumCols, CurrentBlock, NextBlock), Column, New
     ( MaxNuevo > MaxAnterior ->
         % Obtener la lista de bloques retirados
         bloques_retirados(MaxAnterior, MaxNuevo, RetiredBlocks),
-        % Validar ambos bloques en cola
-        validate_and_update_queue(FinalGrid, NextBlock, RetiredBlocks, ValidNextBlock, NeedsNewCurrent),
-        % Generar bloques según la validación
-        ( NeedsNewCurrent = true ->
-            % NextBlock fue eliminado, generar nuevo par completo
+        % Comprobar si NextBlock fue eliminado
+        ( member(NextBlock, RetiredBlocks) ->
+            % NextBlock es inválido, generar un nuevo par de bloques
             generate_block_pair(FinalGrid, NewCurrentBlock, NewNextBlock),
             NewGameState = gameState(FinalGrid, NumCols, NewCurrentBlock, NewNextBlock)
-        ;   % NextBlock es válido, solo generar nuevo NextBlock
+        ;   % NextBlock sigue siendo válido, solo generar un nuevo NextBlock
             generate_valid_next_block(FinalGrid, NewNextBlock),
-            NewGameState = gameState(FinalGrid, NumCols, ValidNextBlock, NewNextBlock)
+            NewGameState = gameState(FinalGrid, NumCols, NextBlock, NewNextBlock)
         )
     ;   % No hay nuevo máximo, avanzar la cola normalmente
         generate_valid_next_block(FinalGrid, NewNextBlock),
         NewGameState = gameState(FinalGrid, NumCols, NextBlock, NewNextBlock)
     ).
-
-% validate_and_update_queue(+Grid, +NextBlock, +RetiredBlocks, -ValidNextBlock, -NeedsNewCurrent)
-% Valida los bloques en cola y determina si necesitan ser reemplazados
-validate_and_update_queue(Grid, NextBlock, RetiredBlocks, ValidNextBlock, NeedsNewCurrent) :-
-    ( member(NextBlock, RetiredBlocks) ->
-        % NextBlock fue eliminado, necesitamos generar nuevo bloque actual también
-        ValidNextBlock = none,
-        NeedsNewCurrent = true
-    ;   % NextBlock sigue siendo válido
-        ValidNextBlock = NextBlock,
-        NeedsNewCurrent = false
-    ).
-
-% validate_block_in_range(+Block, +Grid)
-% Verifica si un bloque está en el rango válido de disparo
-validate_block_in_range(Block, Grid) :-
-    max_in_grid(Grid, Max),
-    rango_disparo(Max, Rango),
-    member(Block, Rango).
-
-% clean_invalid_blocks_from_queue(+CurrentBlock, +NextBlock, +Grid, -ValidCurrentBlock, -ValidNextBlock, -BlocksCleaned)
-% Limpia bloques inválidos de la cola de disparo
-clean_invalid_blocks_from_queue(CurrentBlock, NextBlock, Grid, ValidCurrentBlock, ValidNextBlock, BlocksCleaned) :-
-    % Verificar CurrentBlock
-    ( validate_block_in_range(CurrentBlock, Grid) ->
-        ValidCurrentBlock = CurrentBlock,
-        CurrentCleaned = false
-    ;   generate_valid_next_block(Grid, ValidCurrentBlock),
-        CurrentCleaned = true
-    ),
-    % Verificar NextBlock
-    ( validate_block_in_range(NextBlock, Grid) ->
-        ValidNextBlock = NextBlock,
-        NextCleaned = false
-    ;   generate_valid_next_block(Grid, ValidNextBlock),
-        NextCleaned = true
-    ),
-    % Determinar qué bloques fueron limpiados
-    findall(Block, 
-        ( ( CurrentCleaned = true, Block = CurrentBlock )
-        ; ( NextCleaned = true, Block = NextBlock )
-        ), BlocksCleaned).
 
 %% apply_changes(+Grid, +Changes, -NewGrid)
 apply_changes(Grid, [], Grid).
