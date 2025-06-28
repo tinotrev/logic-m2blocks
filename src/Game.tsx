@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import PengineClient, { PrologTerm } from './PengineClient';
 import Board from './Board';
@@ -181,75 +180,124 @@ function Game() {
    */
   // Versión corregida que actualiza inmediatamente los bloques del footer
   async function handleLaneClick(lane: number) {
-    if (waiting || !shootBlock || !gameState) return;
+  if (waiting || !shootBlock || !gameState) return;
 
-    setWaiting(true);
+  setWaiting(true);
 
-    try {
-      // PASO 1: Actualizar inmediatamente la UI del footer
-      const shotBlock = shootBlock;
-      const currentNextBlock = nextBlock;
+  try {
+    // PASO 1: Hacer el disparo y obtener efectos
+    const gameStateString = `gameState(${JSON.stringify(grid).replace(/"/g, '')}, ${numOfColumns}, ${shootBlock}, ${nextBlock})`;
+    const shootQueryS = `shoot(${shootBlock}, ${lane}, ${JSON.stringify(grid).replace(/"/g, '')}, ${numOfColumns}, Effects)`;
+    
+    const [gameStateResponse, shootResponse] = await Promise.all([
+      pengine.query(`update_game_state(${gameStateString}, ${lane}, NewGameState)`),
+      pengine.query(shootQueryS)
+    ]);
+
+    if (gameStateResponse?.['NewGameState'] && shootResponse?.['Effects']) {
+      const newGameState = gameStateResponse['NewGameState'];
+      const effects = shootResponse['Effects'];
       
-      // El bloque actual pasa a ser el siguiente
-      setShootBlock(currentNextBlock);
-      // Ocultar el siguiente bloque hasta que tengamos el nuevo valor
-      setNextBlock(null);
-
-      // PASO 2: Realizar el disparo en Prolog
-      const gameStateString = `gameState(${JSON.stringify(grid).replace(/"/g, '')}, ${numOfColumns}, ${shotBlock}, ${currentNextBlock})`;
-      const queryS = `update_game_state(${gameStateString}, ${lane}, NewGameState)`;
-      const response = await pengine.query(queryS);
-
-      if (response && response['NewGameState']) {
-        const newGameState = response['NewGameState'];
-        const newGrid = newGameState.args[0];
-        const finalCurrentBlock = newGameState.args[2];  // Este debería ser currentNextBlock
-        const finalNextBlock = newGameState.args[3];     // Este es el nuevo siguiente
-
-        // Detectar si hubo limpieza de bloques en la cola
-        if (finalCurrentBlock !== currentNextBlock) {
-          addNotification('Bloque de la cola actualizado por cambio de rango');
+      // PASO 2: Actualizar INMEDIATAMENTE la primera grilla de los efectos
+      // Esto hace que el bloque aparezca en la grilla sin delay
+      const firstEffect = effects[0];
+      const firstEffectGrid = firstEffect.args[0];
+      setGrid(firstEffectGrid);
+      
+      // PASO 3: Actualizar los bloques del footer
+      const finalCurrentBlock = newGameState.args[2];
+      const finalNextBlock = newGameState.args[3];
+      setShootBlock(finalCurrentBlock);
+      setNextBlock(finalNextBlock);
+      setGameState(newGameState);
+      
+      // PASO 4: Procesar efectos del primer paso (sin cambiar la grilla)
+      const firstEffectInfo = firstEffect.args[1];
+      firstEffectInfo.forEach((effectInfoItem: EffectInfoTerm) => {
+        const { functor, args } = effectInfoItem;
+        switch (functor) {
+          case 'score':
+            setScore(score => score + args[0]);
+            break;
+          case 'newBlock':
+            console.log(`🎯 Nuevo bloque creado: ${args[0]}`);
+            break;
+          // ... otros efectos
         }
-
-        // Calcular nuevo máximo para la UI
-        const newMax = Math.max(...newGrid.filter((cell: any) => typeof cell === 'number'));
-        if (newMax > maxBlock) {
-          setMaxBlock(newMax);
-          addNotification(`¡Nuevo máximo alcanzado: ${newMax}!`);
-        }
-
-        // PASO 3: Obtener y animar los efectos del disparo
-        const shootQueryS = `shoot(${shotBlock}, ${lane}, ${JSON.stringify(grid).replace(/"/g, '')}, ${numOfColumns}, Effects)`;
-        const shootResponse = await pengine.query(shootQueryS);
-
-        if (shootResponse && shootResponse['Effects']) {
-          // PASO 4: Animar efectos y actualizar todo AL FINAL
-          await animateEffectsWithFinalUpdate(
-            shootResponse['Effects'], 
-            newGrid, 
-            finalCurrentBlock, 
-            finalNextBlock, 
-            newGameState
-          );
-        } else {
-          // Si no hay efectos, actualizar inmediatamente
-          updateGameStateUI(newGrid, finalCurrentBlock, finalNextBlock, newGameState);
-          setWaiting(false);
-        }
-      } else {
-        // Si hay error, restaurar el estado original
-        setShootBlock(shotBlock);
-        setNextBlock(currentNextBlock);
-        setWaiting(false);
+      });
+      
+      // PASO 5: Animar el resto de efectos si existen
+      const remainingEffects = effects.slice(1);
+      if (remainingEffects.length > 0) {
+        await delay(1000); // Delay antes de continuar con el resto
+        await animateRemainingEffects(remainingEffects);
       }
-    } catch (error) {
-      console.error('Error in lane click:', error);
-      // Restaurar estado original en caso de error
-      setShootBlock(shootBlock);
-      setNextBlock(nextBlock);
+      
+      // Actualizar máximo al final
+      const newMax = Math.max(...firstEffectGrid.filter((cell: any) => typeof cell === 'number'));
+      if (newMax > maxBlock) {
+        setMaxBlock(newMax);
+      }
+      
+      setWaiting(false);
+    } else {
       setWaiting(false);
     }
+  } catch (error) {
+    console.error('Error in lane click:', error);
+    setWaiting(false);
   }
+}
+
+// Nueva función auxiliar para animar solo los efectos restantes
+async function animateRemainingEffects(effects: EffectTerm[]) {
+  if (effects.length === 0) return;
+  
+  const effect = effects[0];
+  const [effectGrid, effectInfo] = effect.args;
+  setGrid(effectGrid);
+
+  // Procesar efectos
+  effectInfo.forEach((effectInfoItem) => {
+    const { functor, args } = effectInfoItem;
+    
+    switch (functor) {
+      case 'score':
+        setScore(score => score + args[0]);
+        break;
+      case 'combo':
+        if (args[0] >= 3) {
+          addNotification(`Combo x${args[0]}!`);
+        }
+        break;
+      case 'cleanup':
+        addNotification(`Bloques limpiados: ${args[0].join(', ')}`);
+        break;
+      case 'newMaxBlock':
+        if (args[0] >= 512) {
+          addNotification(`¡Nuevo máximo desbloqueado: ${args[0]}!`);
+        }
+        break;
+      case 'blockEliminated':
+        addNotification('Bloques retirados del rango');
+        break;
+      case 'newBlockAdded':
+        addNotification('Nuevos bloques agregados al rango');
+        break;
+      default:
+        break;
+    }
+  });
+
+  const restEffects = effects.slice(1);
+  if (restEffects.length > 0) {
+    const hasGravity = effectInfo.some(info => info.functor === 'gravity');
+    const delayTime = hasGravity ? 800 : 1000;
+    
+    await delay(delayTime);
+    await animateRemainingEffects(restEffects);
+  }
+}
 
   // Nueva función que maneja las animaciones y actualiza la UI al final
   async function animateEffectsWithFinalUpdate(
@@ -292,6 +340,9 @@ function Game() {
     effectInfo.forEach((effectInfoItem) => {
       const { functor, args } = effectInfoItem;
       
+      // DEBUG: Mostrar todos los efectos que llegan
+      console.log(`🔔 Procesando efecto: ${functor}`, args);
+      
       switch (functor) {
         case 'score':
           setScore(score => score + args[0]);
@@ -305,12 +356,20 @@ function Game() {
           addNotification(`Bloques limpiados: ${args[0].join(', ')}`);
           break;
         case 'newMaxBlock':
-          // Ya manejado en handleLaneClick
+          // Solo notificar si es >= 512
+          if (args[0] >= 512) {
+            addNotification(`¡Nuevo máximo desbloqueado: ${args[0]}!`);
+          }
           break;
         case 'blockEliminated':
-          // Ya manejado en handleLaneClick
+          addNotification('Bloques retirados del rango');
+          break;
+        case 'newBlockAdded':
+          console.log('🎯 newBlockAdded detectado!');
+          addNotification('Nuevos bloques agregados al rango');
           break;
         default:
+          console.log(`⚠️ Efecto no manejado: ${functor}`, args);
           break;
       }
     });
@@ -363,7 +422,7 @@ function Game() {
           }
         } catch (error) {
           // nextBlock no es válido, generar ambos bloques nuevos
-          addNotification('Bloque siguiente actualizado por cambio de rango');
+          // Removida notificación no deseada
           
           const newPairQueryS = `generate_block_pair(${JSON.stringify(finalGrid).replace(/"/g, '')}, NewCurrent, NewNext)`;
           const newPairResponse = await pengine.query(newPairQueryS);
@@ -416,11 +475,17 @@ function Game() {
                 setCleanedBlocks(args[0]);
                 break;
             case 'newMaxBlock':
-                addNotification(`¡Nuevo máximo desbloqueado: ${args[0]}!`);
+                // Solo notificar si es >= 512
+                if (args[0] >= 512) {
+                    addNotification(`¡Nuevo máximo desbloqueado: ${args[0]}!`);
+                }
                 setMaxBlock(args[0]);
                 break;
             case 'blockEliminated':
-                addNotification('Bloques eliminados del juego');
+                addNotification('Bloques retirados del rango');
+                break;
+            case 'newBlockAdded':
+                addNotification('Nuevos bloques agregados al rango');
                 break;
             default:
                 break;
