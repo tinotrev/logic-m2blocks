@@ -282,7 +282,12 @@ async function animateRemainingEffects(effects: EffectTerm[]) {
         addNotification('Bloques retirados del rango');
         break;
       case 'newBlockAdded':
-        addNotification('Nuevos bloques agregados al rango');
+        if (args && args[0] && args[0].length > 0) {
+            const newBlocks = args[0].join(', ');
+            addNotification(`¡Bloque ${newBlocks} desbloqueado para disparar!`);
+        } else {
+            addNotification('¡Nuevos bloques desbloqueados para disparar!');
+        }
         break;
       default:
         break;

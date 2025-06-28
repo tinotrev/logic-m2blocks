@@ -374,7 +374,7 @@ process_cleanup_and_notifications(MaxAnterior, MaxNuevo, Grid, NumCols, EffectsA
         ;   Notifications = []
         ),
         ( BloquesAgregados \= [] -> 
-            append(Notifications, [newBlockAdded], TempNotif1)
+            append(Notifications, [newBlockAdded(BloquesAgregados)], TempNotif1)  % ← Incluir la lista
         ;   TempNotif1 = Notifications
         ),
         ( BloquesRetirados \= [] ->
