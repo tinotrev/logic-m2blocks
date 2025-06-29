@@ -157,23 +157,33 @@ La interfaz en React cumple con los siguientes objetivos:
 
 Lo que se lograra observar ahora es la realizacion de un combo, mostraremos 4 imagenes:
 
-+ Imagen 1:![alt text](images/comboImagen1.png)
++ Imagen 1:
+
+![alt text](images/comboImagen1.png)
 
  Muestra la grilla antes de realizar el disparo.
 
  ****
 
- + Imagen 2:![alt text](images/comboImagen2.png)
+ + Imagen 2:
+ 
+ ![alt text](images/comboImagen2.png)
 
  Podemos observar que se realiza el disparo del bloque "2".
 
- + Imagen 3:![alt text](images/comboImagen3.png)
+ ****
+
+ + Imagen 3:
+ 
+ ![alt text](images/comboImagen3.png)
 
  Logramos ver que los 3 bloques se juntaron para formar uno solo que es el bloque "4". Tambien se observa notificacion de "Combo X3!".
 
  ****
 
- + Imagen 4:![alt text](images/comboImagen4.png)
+ + Imagen 4:
+ 
+![alt text](images/comboImagen4.png)
 
  Nueva combinacion entre los bloques "4" y se forma el bloque "8".
 
@@ -201,23 +211,31 @@ Se observa el bloque actual a disparar que es el "2" y se ve el siguiente "16" q
 
 **Caso 4:"Nuevo maximo desbloqueado y bloques retirados"**
 
-En las siguientes 5 imagenes observaremos la secuencia.
+En las siguientes imagenes observaremos la secuencia.
 
 ![alt text](images/nuevoMax1.png)
 
 Grilla donde se ve el nuevo maximo: "1024".
 
+****
+
 ![alt text](images/nuevoMax2.png)
 
 Notificacion nuevo maximo desbloqueado y eliminacion bloques "2".
+
+****
 
 ![alt text](images/nuevoMax3.png)
 
 Gravedad aplicada al bloque 16 debido a la eliminacion de los bloques "2".
 
+****
+
 ![alt text](images/nuevoMax4.png)
 
 Notificacion nuevo bloque disponible a disparar.
+
+****
 
 ![alt text](images/nuevoMax5.png)
 
