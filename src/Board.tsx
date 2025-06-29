@@ -8,7 +8,7 @@ interface BoardProps {
   onLaneClick: (lane: number) => void;
   showHints: boolean;
   shblock: number | null;
-  nextBlock: number | null; // Nueva prop
+  nextBlock: number | null;
   hintInfo: {[column: number]: any};
 }
 
@@ -20,16 +20,15 @@ function Board({ grid, numOfColumns, onLaneClick, showHints, shblock, hintInfo, 
   const handleMouseMove = (e: React.MouseEvent) => {
     setMousePosition({ x: e.clientX, y: e.clientY });
   };
-  // Función para formatear la información del hint - SIMPLIFICADA
+  
   const formatHintInfo = (hint: any[]): string => {
     if (!hint || hint.length === 0) return 'Sin información';
     
     const hintTypes = hint
       .filter(item => {
-        // Filtrar solo la información de combos, ignorar nextBlock Y newBlock
         if (typeof item === 'object') {
           if (item.functor === 'nextBlock' || item.functor === 'newBlock') {
-            return false; // Ignorar nextBlock y newBlock
+            return false;
           }
         }
         return true;
@@ -49,13 +48,12 @@ function Board({ grid, numOfColumns, onLaneClick, showHints, shblock, hintInfo, 
             case 'score':
               return `Score: ${item.args[0]}`;
             default:
-              // Ignorar otros objetos no reconocidos para evitar [Object object]
               return null;
           }
         }
         return String(item);
       })
-      .filter(item => item !== null); // Filtrar elementos null
+      .filter(item => item !== null);
     
     return hintTypes.join(', ');
   };
@@ -71,14 +69,12 @@ function Board({ grid, numOfColumns, onLaneClick, showHints, shblock, hintInfo, 
           gridTemplateRows: `repeat(${numOfRows}, 70px)`,
         }}
       >
-        {/* Primero: bloques visibles */}
         {grid.map((num, i) => {
           if (num === '-') return null;
           const pos: Position = [Math.floor(i / numOfColumns), i % numOfColumns];
           return <Block value={num} position={pos} key={i} />;
         })}
 
-        {/* Luego: columnas interactivas */}
         {Array.from({ length: numOfColumns }).map((_, i) => (
           <div
             className="lane"
@@ -93,7 +89,7 @@ function Board({ grid, numOfColumns, onLaneClick, showHints, shblock, hintInfo, 
             key={`lane-${i}`}
           />
         ))}
-      </div>      {/* Tooltip que sigue al mouse */}
+      </div>
       {showHints && hoveredLane !== null && (
         <div
           className="tooltip"
